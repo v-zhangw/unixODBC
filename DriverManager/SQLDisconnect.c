@@ -289,7 +289,7 @@ SQLRETURN SQLDisconnect( SQLHDBC connection_handle )
         __clean_stmt_from_dbc( connection );
         __clean_desc_from_dbc( connection );
 
-        return_to_pool( connection );
+        return_to_pool( connection);
 
         if ( log_info.log_flag )
         {
@@ -311,7 +311,7 @@ SQLRETURN SQLDisconnect( SQLHDBC connection_handle )
         __clean_stmt_from_dbc( connection );
         __clean_desc_from_dbc( connection );
 
-        return_to_pool( connection );
+        return_to_pool( connection);
 
         if ( log_info.log_flag )
         {
