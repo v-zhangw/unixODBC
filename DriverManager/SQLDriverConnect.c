@@ -695,6 +695,8 @@ SQLRETURN SQLDriverConnect(
     SQLCHAR local_out_conection[ 2048 ];
     char *save_filedsn;
     int warnings = 0;
+    int ret = 0;
+    int freshwait = 1;
 
     /*
      * check connection
@@ -892,16 +894,25 @@ SQLRETURN SQLDriverConnect(
 
     connection -> pooled_connection = NULL;
 
-    if ( pooling_enabled && search_for_pool( connection, 
-                                                NULL, 0,
-                                                NULL, 0,
-                                                NULL, 0,
-                                                conn_str_in, len_conn_str_in ))
+
+retry:
+
+    if ( pooling_enabled )
     {
+        ret = search_for_pool(  connection, 
+                                NULL, 0,
+                                NULL, 0,
+                                NULL, 0,
+                                conn_str_in, len_conn_str_in );
+    }
+
+    if ( pooling_enabled && ret == 1)
+    {
+        freshwait = 1;
         /*
          * copy the in string to the out string
          */
-
+        
         ret_from_connect = SQL_SUCCESS;
 
         if ( conn_str_out )
@@ -957,8 +968,32 @@ SQLRETURN SQLDriverConnect(
         return function_return( SQL_HANDLE_DBC, connection, ret_from_connect, DEFER_R0 );
     }
 
+    if ( pooling_enabled && ret == 2)
+    {
+        if (pool_timedwait(connection, freshwait))
+        {
+            dm_log_write( __FILE__, 
+                    __LINE__, 
+                    LOG_INFO, 
+                    LOG_INFO, 
+                    "Error: 50001" );
+            __post_internal_error( &connection -> error,
+                    ERROR_50001, NULL,
+                    connection -> environment -> requested_version );
+
+            return function_return_nodrv( SQL_HANDLE_DBC, connection, SQL_ERROR);
+        }
+        else
+        {
+            freshwait = 0;
+            goto retry;
+        }
+    }
+
+    freshwait = 1;
+
     /*
-     * else safe the info for later
+     * else save the info for later
      */
 
     if ( pooling_enabled )
@@ -1066,6 +1101,8 @@ SQLRETURN SQLDriverConnect(
                                 if ( save_filedsn ) {
                                     free( save_filedsn );
                                 }
+
+                                decrement_poolsize_ex();
                         
                                 return function_return( SQL_HANDLE_DBC, connection, SQL_ERROR, DEFER_R0 );
                             }
@@ -1122,7 +1159,9 @@ SQLRETURN SQLDriverConnect(
                                 if ( save_filedsn ) {
                                     free( save_filedsn );
                                 }
-                        
+
+                                decrement_poolsize_ex();
+
                                 return function_return( SQL_HANDLE_DBC, connection, SQL_ERROR, DEFER_R0 );
                             }
 
@@ -1199,7 +1238,9 @@ SQLRETURN SQLDriverConnect(
             if ( save_filedsn ) {
                 free( save_filedsn );
             }
-                        
+
+            decrement_poolsize_ex();
+
             return function_return( SQL_HANDLE_DBC, connection, SQL_ERROR, DEFER_R0 );
         }
 
@@ -1251,6 +1292,8 @@ SQLRETURN SQLDriverConnect(
                 free( save_filedsn );
             }
 
+            decrement_poolsize_ex();
+
             return function_return( SQL_HANDLE_DBC, connection, SQL_ERROR, DEFER_R0 );
         }
 
@@ -1272,6 +1315,8 @@ SQLRETURN SQLDriverConnect(
                 free( save_filedsn );
             }
 
+            decrement_poolsize_ex();
+            
             return function_return( SQL_HANDLE_DBC, connection, SQL_ERROR, DEFER_R0 );
         }
 
@@ -1297,6 +1342,8 @@ SQLRETURN SQLDriverConnect(
                 free( save_filedsn );
             }
 
+            decrement_poolsize_ex();
+            
             return function_return( SQL_HANDLE_DBC, connection, SQL_ERROR, DEFER_R0 );
         }
 
@@ -1333,6 +1380,8 @@ SQLRETURN SQLDriverConnect(
 
         __disconnect_part_four( connection );       /* release unicode handles */
 
+        decrement_poolsize_ex();
+        
         return function_return( SQL_HANDLE_DBC, connection, SQL_ERROR, DEFER_R0 );
     }
 
@@ -1355,6 +1404,8 @@ SQLRETURN SQLDriverConnect(
             free( save_filedsn );
         }
 
+        decrement_poolsize_ex();
+        
         return function_return( SQL_HANDLE_DBC, connection, SQL_ERROR, DEFER_R0 );
     }
 
@@ -1485,6 +1536,8 @@ SQLRETURN SQLDriverConnect(
                 free( save_filedsn );
             }
 
+            decrement_poolsize_ex();
+            
             return function_return( SQL_HANDLE_DBC, connection, ret_from_connect, DEFER_R0 );
         }
 		connection -> unicode_driver = 0;
@@ -1648,6 +1701,8 @@ SQLRETURN SQLDriverConnect(
                 free( s1 );
             }
 
+            decrement_poolsize_ex();
+            
             return function_return( SQL_HANDLE_DBC, connection, ret_from_connect, DEFER_R0 );
         }
         else
@@ -1698,6 +1753,8 @@ SQLRETURN SQLDriverConnect(
             free( save_filedsn );
         }
 
+        decrement_poolsize_ex();
+        
         return function_return( SQL_HANDLE_DBC, connection, SQL_ERROR, DEFER_R0 );
     }
 
@@ -1838,6 +1895,11 @@ SQLRETURN SQLDriverConnect(
     if ( warnings && ret_from_connect == SQL_SUCCESS )
     {
         ret_from_connect = SQL_SUCCESS_WITH_INFO;
+    }
+
+    if ( pooling_enabled )
+    {
+        add_to_pool( connection );
     }
 
     return function_return_nodrv( SQL_HANDLE_DBC, connection, ret_from_connect );

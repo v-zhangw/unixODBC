@@ -308,6 +308,8 @@ static pthread_mutex_t mutex_env = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t mutex_pool = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t mutex_iconv = PTHREAD_MUTEX_INITIALIZER;
 
+int pool_timeout = 0;
+
 static int local_mutex_entry( pthread_mutex_t *mutex )
 {
     return pthread_mutex_lock( mutex );
@@ -1747,6 +1749,49 @@ void thread_release( int type, void *handle )
         }
         break;
     }
+}
+
+pthread_cond_t cv_pool = PTHREAD_COND_INITIALIZER;
+struct timespec t_s;
+
+/*
+Waits on pool condition variable.
+Returns
+    TRUE: on Timeouts
+    FALSE: on Signals
+*/
+int pool_timedwait (void *handle, int first)
+{
+    DMHDBC connection;
+    connection = handle;
+    int ret;
+    if (first)
+    {
+        clock_gettime(CLOCK_REALTIME, &t_s);
+        t_s.tv_sec += pool_timeout;
+    }
+    switch (connection -> protection_level)
+    {
+        case TS_LEVEL3:
+            mutex_pool_exit();
+            ret = pthread_cond_timedwait(&cv_pool, &mutex_env, &t_s);
+            break;
+        case TS_LEVEL2:
+        case TS_LEVEL1:
+            mutex_pool_exit();
+            ret = pthread_cond_timedwait(&cv_pool, &connection -> mutex, &t_s);
+            break;
+        case TS_LEVEL0:
+            ret = pthread_cond_timedwait(&cv_pool, &mutex_pool, &t_s);
+            break;
+    }
+    mutex_pool_exit();
+    return ret;
+}
+
+void pool_signal()
+{
+    pthread_cond_signal(&cv_pool);
 }
 
 #endif

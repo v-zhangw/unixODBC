@@ -422,10 +422,12 @@ typedef struct connection_pool
     int     ttl;
     int     timeout;
     int     in_use;
-    struct  connection_pool *next;
+    struct  connection_pool *right;
+    struct  connection_pool *down;
     struct  connection connection;
     int     cursors;
 } CPOOL;
+
 
 typedef struct descriptor
 {
@@ -659,7 +661,8 @@ typedef enum error_id
     ERROR_SL010,
     ERROR_SL008,
     ERROR_HY000,
-    ERROR_IM011
+    ERROR_IM011,
+    ERROR_50001
 } error_id;
 
 #define IGNORE_THREAD       (-1)
@@ -787,6 +790,13 @@ struct driver_helper_funcs
 
 void thread_protect( int type, void *handle );
 void thread_release( int type, void *handle );
+int pool_timedwait ( void*, int);
+void pool_signal();
+void increment_poolsize();
+void decrement_poolsize();
+void decrement_poolsize_ex();
+int get_poolsize();
+int get_pool_max();
 
 #else
 
@@ -919,6 +929,8 @@ int search_for_pool( DMHDBC connection,
            SQLSMALLINT connect_string_length );
 
 void return_to_pool( DMHDBC connection );
+
+void add_to_pool( DMHDBC connection );
 
 /*
  * Macros to check and call functions in the driver

@@ -5629,6 +5629,13 @@ void __post_internal_error_api( EHEAD *error_handle,
         message = "General error";
         break;
 
+      case ERROR_50001:
+        strcpy( sqlstate, "50001");
+        message = "Connection Pool Max Size has been reached and the wait has timed out";
+        subclass = SUBCLASS_ODBC;
+        class = SUBCLASS_ODBC;
+        break;
+
 	  default:
         strcpy( sqlstate, "?????" );
         message = "Unknown";
